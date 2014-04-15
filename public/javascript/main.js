@@ -292,7 +292,7 @@
       // var video = document.createElement("img");
       // video.src = URL.createObjectURL(base64_to_blob(data.v));
       $("#conversation").append("<div class='msg' style='color:"+data.c+"'>"+username+ ": </div>");
-      $("#conversation").append("<div id=\"video\"> <span style='color: white'>" + data.m + "</span>");
+      $("#conversation").append("<div class='video'> <span style='color: pink'>" + data.m + "</span>");
       document.getElementById("conversation").appendChild(video);
       $("#conversation").append("</div>");
       //document.getElementById("conversation").appendChild(video);
