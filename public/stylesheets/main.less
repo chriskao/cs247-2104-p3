@@ -7,6 +7,25 @@ a {
   color: #00B7FF;
 }
 
+#gallery{
+  position:absolute;
+  width: 170;
+  top: 200px;
+  right: 10px;
+}
+
+#video {
+    position: relative;
+    width: 33%;
+    word-wrap: break-word;
+}
+
+#video span {
+    position: absolute;
+    top: 10;
+    left: 10;
+}
+
 #webcam_stream{
   position: absolute;
   top: 10px;
@@ -15,6 +34,31 @@ a {
   video{
     border: 2px solid #dcc;
   }
+}
+
+#start_recording_message{
+  background-color:yellow;
+  text-align:center;
+  width: 30%;
+}
+
+#message_video{
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  margin-top: -120px;
+  margin-left: -160px;
+  video{
+    border: 2px solid #dcc;
+  }
+}
+
+#stop_button{
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  margin-top: 120px;
+  margin-left: 160px;
 }
 
 #second_counter{

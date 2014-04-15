@@ -4,11 +4,15 @@
 (function() {
 
   var cur_video_blob = null;
+  var temp_video_blob = null;
   var fb_instance;
+  var first_time = 1; 
+  var localStream;
+  var video;
 
   $(document).ready(function(){
     connect_to_chat_firebase();
-    connect_webcam();
+    //connect_webcam();
   });
 
   function connect_to_chat_firebase(){
@@ -30,14 +34,6 @@
     var fb_instance_stream = fb_new_chat_room.child('stream');
     var my_color = "#"+((1<<24)*Math.random()|0).toString(16);
 
-    // listen to events
-    fb_instance_users.on("child_added",function(snapshot){
-      display_msg({m:snapshot.val().name+" joined the room",c: snapshot.val().c});
-    });
-    fb_instance_stream.on("child_added",function(snapshot){
-      display_msg(snapshot.val());
-    });
-
     // block until username is answered
     var username = window.prompt("Welcome, warrior! please declare your name?");
     if(!username){
@@ -46,11 +42,53 @@
     fb_instance_users.push({ name: username,c: my_color});
     $("#waiting").remove();
 
+    // listen to events
+    fb_instance_users.on("child_added",function(snapshot){
+      display_msg({m:snapshot.val().name+" joined the room",c: snapshot.val().c}, username);
+    });
+    fb_instance_stream.on("child_added",function(snapshot){
+      display_msg(snapshot.val(), username);
+    });
+
+    // // block until username is answered
+    // var username = window.prompt("Welcome, warrior! please declare your name?");
+    // if(!username){
+    //   username = "anonymous"+Math.floor(Math.random()*1111);
+    // }
+    // fb_instance_users.push({ name: username,c: my_color});
+    // $("#waiting").remove();
+
     // bind submission box
     $("#submission input").keydown(function( event ) {
       if (event.which == 13) {
         if(has_emotions($(this).val())){
-          fb_instance_stream.push({m:username+": " +$(this).val(), v:cur_video_blob, c: my_color});
+          var message = $(this).val();
+          // starts recording video, stops when user presses stop 
+          //var message = $(this).val();
+          //var color = my_color;
+          //record_video();
+          if (first_time == 1) {
+            var start_recording_message = document.getElementById('start_recording_message');
+            start_recording_message.innerHTML = "Click Allow on top right to begin recording!";
+            $("#start_recording_message").fadeOut(4000);
+            start_up_video(fb_instance_stream, username, message, my_color);
+          } else {
+            // navigator.getUserMedia  = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
+            // console.log(navigator.getUserMedia);
+            // if (navigator.getUserMedia) {
+            //   navigator.getUserMedia(video, function(stream) {              
+            //     video.src = (navigator.webkitGetUserMedia) ? window.webkitURL.createObjectURL(stream) : stream;
+            //     localStream = stream;
+            //   }, function(error) {
+            //       console.error("Video capture error: ", error.code);
+            //   });
+
+            //   var stopButton = document.getElementById('stop_button');
+            //   stopButton.innerHTML = "<button type=\"button\">Stop</button>";
+
+            // }
+          }
+         
         }else{
           fb_instance_stream.push({m:username+": " +$(this).val(), c: my_color});
         }
@@ -63,53 +101,114 @@
     scroll_to_bottom(1300);
   }
 
-  // creates a message node and appends it to the conversation
-  function display_msg(data){
-    $("#conversation").append("<div class='msg' style='color:"+data.c+"'>"+data.m+"</div>");
-    if(data.v){
-      // for video element
-      var video = document.createElement("video");
-      video.autoplay = true;
-      video.controls = false; // optional
-      video.loop = true;
-      video.width = 120;
+  function start_up_video(fb_instance_stream, username, message, my_color) {
+     var mediaConstraints = {
+            video: true,
+            audio: false
+          };
 
-      var source = document.createElement("source");
-      source.src =  URL.createObjectURL(base64_to_blob(data.v));
-      source.type =  "video/webm";
+           // callback for when we get video stream from user.
+          var onMediaSuccess = function(stream) {
 
-      video.appendChild(source);
+            var stopButton = document.getElementById('stop_button');
+            stopButton.innerHTML = "<button type=\"button\">Stop</button>";
 
-      // for gif instead, use this code below and change mediaRecorder.mimeType in onMediaSuccess below
-      // var video = document.createElement("img");
-      // video.src = URL.createObjectURL(base64_to_blob(data.v));
+            // create video element, attach webcam stream to video element
+            var video_width= 320;
+            var video_height= 240;
+            var message_video = document.getElementById('message_video');
+            video = document.createElement('video');
+            message_video.innerHTML = "";
+            // adds these properties to the video
+            video = mergeProps(video, {
+                controls: false,
+                width: video_width,
+                height: video_height,
+                src: URL.createObjectURL(stream)
+            });
+            video.play();
+            message_video.appendChild(video);
 
-      document.getElementById("conversation").appendChild(video);
-    }
+            // now record stream in 5 seconds interval
+            var video_container = document.getElementById('video_container');
+            var mediaRecorder = new MediaStreamRecorder(stream);
+            var index = 1;
+
+            mediaRecorder.mimeType = 'video/webm';
+            // mediaRecorder.mimeType = 'image/gif';
+            // make recorded media smaller to save some traffic (80 * 60 pixels, 3*24 frames)
+            mediaRecorder.video_width = video_width/2;
+            mediaRecorder.video_height = video_height/2;
+
+            mediaRecorder.ondataavailable = function (blob) {
+                console.log("new data available!");
+                video_container.innerHTML = "";
+
+                // convert data into base 64 blocks
+                blob_to_base64(blob,function(b64_data){
+                  temp_video_blob = b64_data;
+                  //console.log("why is this not being set??");
+                  fb_instance_stream.push({m:message, v:temp_video_blob, c: my_color});
+                  localStream.stop();
+                });
+
+                //console.log(temp_video_blob);
+
+      
+            };
+            
+            mediaRecorder.start(60000);
+            console.log("connect to media stream!");
+            stopButton.onclick = function() {
+              //setTimeout(function(){
+                video = mergeProps(video, {
+                  controls: false,
+                  width: 0,
+                  height: 0,
+                  // src: null
+                });
+                mediaRecorder.stop();
+                stopButton.innerHTML = "";
+                //alert("Video stopped!");
+                //fb_instance_stream.push({m:username+": " + message, v:temp_video_blob, c: my_color});
+                //,3000); //after 3 secs, remove stream 
+            };
+            localStream = stream;
+          }
+
+          // callback if there is an error when we try and get the video stream
+          var onMediaError = function(e) {
+            console.error('media error', e);
+          }
+
+          // get video stream from user. see https://github.com/streamproc/MediaStreamRecorder
+          navigator.getUserMedia(mediaConstraints, onMediaSuccess, onMediaError);
+          // while (temp_video_blob == null) {
+          //   setTimeout(function(), 500);
+          // }
+          // When stop button is clicked
+          //fb_instance_stream.push({m:username+": " +$(this).val(), v:temp_video_blob, c: my_color});
   }
 
-  function scroll_to_bottom(wait_time){
-    // scroll to bottom of div
-    setTimeout(function(){
-      $("html, body").animate({ scrollTop: $(document).height() }, 200);
-    },wait_time);
-  }
-
-  function connect_webcam(){
+  function record_video(){
     // we're only recording video, not audio
     var mediaConstraints = {
       video: true,
       audio: false
     };
 
-    // callback for when we get video stream from user.
+     // callback for when we get video stream from user.
     var onMediaSuccess = function(stream) {
+
+      var stopButton = document.getElementById('stop_button');
+      stopButton.innerHTML = "<button type=\"button\">Stop</button>";
+
       // create video element, attach webcam stream to video element
-      var video_width= 160;
-      var video_height= 120;
-      var webcam_stream = document.getElementById('webcam_stream');
+      var video_width= 320;
+      var video_height= 240;
+      var message_video = document.getElementById('message_video');
       var video = document.createElement('video');
-      webcam_stream.innerHTML = "";
+      message_video.innerHTML = "";
       // adds these properties to the video
       video = mergeProps(video, {
           controls: false,
@@ -118,14 +217,7 @@
           src: URL.createObjectURL(stream)
       });
       video.play();
-      webcam_stream.appendChild(video);
-
-      // counter
-      var time = 0;
-      var second_counter = document.getElementById('second_counter');
-      var second_counter_update = setInterval(function(){
-        second_counter.innerHTML = time++;
-      },1000);
+      message_video.appendChild(video);
 
       // now record stream in 5 seconds interval
       var video_container = document.getElementById('video_container');
@@ -144,14 +236,27 @@
 
           // convert data into base 64 blocks
           blob_to_base64(blob,function(b64_data){
-            cur_video_blob = b64_data;
+            temp_video_blob = b64_data;
           });
+
+          //fb_instance_stream.push({m:username+": " +$(this).val(), v:temp_video_blob, c: my_color});
       };
-      setInterval( function() {
-        mediaRecorder.stop();
-        mediaRecorder.start(3000);
-      }, 3000 );
+      
+      mediaRecorder.start();
       console.log("connect to media stream!");
+      stopButton.onclick = function() {
+        //setTimeout(function(){
+          mediaRecorder.stop();
+          video = mergeProps(video, {
+            controls: false,
+            width: 0,
+            height: 0,
+            src: null
+          });
+          alert("Video stopped!");
+          //fb_instance_stream.push({m:username+": " + message, v:temp_video_blob, c: color});
+          //,3000); //after 3 secs, remove stream 
+      };
     }
 
     // callback if there is an error when we try and get the video stream
@@ -161,7 +266,118 @@
 
     // get video stream from user. see https://github.com/streamproc/MediaStreamRecorder
     navigator.getUserMedia(mediaConstraints, onMediaSuccess, onMediaError);
+
+
   }
+
+  // creates a message node and appends it to the conversation
+  function display_msg(data, username){
+    //$("#conversation").append("<div class='msg' style='color:"+data.c+"'>"+data.m+"</div>");
+    if(data.v){  // if message includes a video
+      //$("#conversation").append("<div class='special_msg' style='color:"+data.c+"'>"+data.m+"</div>");
+      // for video element
+      var video = document.createElement("video");
+      video.autoplay = true;
+      video.controls = false; // optional
+      video.loop = true;
+      video.width = 180;
+
+      var source = document.createElement("source");
+      source.src =  URL.createObjectURL(base64_to_blob(data.v));
+      source.type =  "video/webm";
+
+      video.appendChild(source);
+
+      // for gif instead, use this code below and change mediaRecorder.mimeType in onMediaSuccess below
+      // var video = document.createElement("img");
+      // video.src = URL.createObjectURL(base64_to_blob(data.v));
+      $("#conversation").append("<div class='msg' style='color:"+data.c+"'>"+username+ ": </div>");
+      $("#conversation").append("<div id=\"video\"> <span style='color: white'>" + data.m + "</span>");
+      document.getElementById("conversation").appendChild(video);
+      $("#conversation").append("</div>");
+      //document.getElementById("conversation").appendChild(video);
+    } else {
+      $("#conversation").append("<div class='msg' style='color:"+data.c+"'>"+data.m+"</div>");
+    }
+  }
+
+  function scroll_to_bottom(wait_time){
+    // scroll to bottom of div
+    setTimeout(function(){
+      $("html, body").animate({ scrollTop: $(document).height() }, 200);
+    },wait_time);
+  }
+
+  // function connect_webcam(){
+  //   // we're only recording video, not audio
+  //   var mediaConstraints = {
+  //     video: true,
+  //     audio: false
+  //   };
+
+  //   // callback for when we get video stream from user.
+  //   var onMediaSuccess = function(stream) {
+
+  //     var gallery = document.getElementById('gallery');
+  //     gallery.innerHTML = "Gallery";
+  //     // create video element, attach webcam stream to video element
+  //     var video_width= 160;
+  //     var video_height= 120;
+  //     var webcam_stream = document.getElementById('webcam_stream');
+  //     var video = document.createElement('video');
+  //     webcam_stream.innerHTML = "";
+  //     // adds these properties to the video
+  //     video = mergeProps(video, {
+  //         controls: false,
+  //         width: video_width,
+  //         height: video_height,
+  //         src: URL.createObjectURL(stream)
+  //     });
+  //     video.play();
+  //     webcam_stream.appendChild(video);
+
+  //     // counter
+  //     var time = 0;
+  //     var second_counter = document.getElementById('second_counter');
+  //     var second_counter_update = setInterval(function(){
+  //       second_counter.innerHTML = time++;
+  //     },1000);
+
+  //     // now record stream in 5 seconds interval
+  //     var video_container = document.getElementById('video_container');
+  //     var mediaRecorder = new MediaStreamRecorder(stream);
+  //     var index = 1;
+
+  //     mediaRecorder.mimeType = 'video/webm';
+  //     // mediaRecorder.mimeType = 'image/gif';
+  //     // make recorded media smaller to save some traffic (80 * 60 pixels, 3*24 frames)
+  //     mediaRecorder.video_width = video_width/2;
+  //     mediaRecorder.video_height = video_height/2;
+
+  //     mediaRecorder.ondataavailable = function (blob) {
+  //         //console.log("new data available!");
+  //         video_container.innerHTML = "";
+
+  //         // convert data into base 64 blocks
+  //         blob_to_base64(blob,function(b64_data){
+  //           cur_video_blob = b64_data;
+  //         });
+  //     };
+  //     setInterval( function() {
+  //       mediaRecorder.stop();
+  //       mediaRecorder.start(3000);
+  //     }, 3000 );  // record a new video every three seconds, and calls ondataavailable 
+  //     console.log("connect to media stream!");
+  //   }
+
+  //   // callback if there is an error when we try and get the video stream
+  //   var onMediaError = function(e) {
+  //     console.error('media error', e);
+  //   }
+
+  //   // get video stream from user. see https://github.com/streamproc/MediaStreamRecorder
+  //   navigator.getUserMedia(mediaConstraints, onMediaSuccess, onMediaError);
+  // }
 
   // check to see if a message qualifies to be replaced with video.
   var has_emotions = function(msg){
