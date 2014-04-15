@@ -71,6 +71,7 @@
             var start_recording_message = document.getElementById('start_recording_message');
             start_recording_message.innerHTML = "Click Allow on top right to begin recording!";
             $("#start_recording_message").fadeOut(4000);
+            $("#conversation").append("<div class='msg' style='color:"+my_color+"'>"+username+ " is recording a video. </div>");
             start_up_video(fb_instance_stream, username, message, my_color);
           } else {
             // navigator.getUserMedia  = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
